@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chat App with MongoDB</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        #chat-box { border: 1px solid #ccc; padding: 10px; width: 400px; height: 300px; overflow-y: scroll; }
+        #message-input { width: 300px; }
+        button { padding: 5px 10px; margin-left: 5px; }
+        .message { padding: 5px; margin: 5px 0; }
+        .sent { background-color: #e1f7d5; }
+        .received { background-color: #f1f1f1; }
+    </style>
+    <script src="https://cdn.ably.com/lib/ably.min-1.2.0.js"></script>
+</head>
+<body>
+    <h2>Simple Chat App with MongoDB</h2>
+    <div id="chat-box"></div>
+    <input type="text" id="message-input" placeholder="Enter message" onkeydown="checkEnter(event)">
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        // Initialize Ably with API key
+        const ably = new Ably.Realtime({
+            key: 'yYqD0zw.8KtRiQ:Mie5VU3mBjnZApvR8OyFPLeIUaknu3Smj-27lmMiYS4',
+            clientId: 'user-' + Math.floor(Math.random() * 1000)
+        });
+
+        // Create a channel for public chat
+        const publicChannel = ably.channels.get('chat');
+
+        // Function to display the messages in the chat box
+        function displayMessages(messages) {
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML = '';  // Clear previous messages
+            messages.forEach((message, index) => {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message');
+                messageDiv.classList.add(index % 2 === 0 ? 'sent' : 'received');
+                messageDiv.innerHTML = `<div>${message.text}</div>`; // Proper string interpolation
+                chatBox.appendChild(messageDiv);
+            });
+            chatBox.scrollTop = chatBox.scrollHeight;  // Scroll to the bottom
+        }
+
+        // Fetch all messages from the backend (MongoDB) and display them
+        async function fetchMessages() {
+            try {
+                const response = await fetch('/messages');
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(data); // Log the messages
+                    displayMessages(data);  // Display messages after fetching
+                } else {
+                    console.error('Failed to fetch messages:', response.status);
+                }
+            } catch (error) {
+                console.error('Error fetching messages:', error);
+            }
+        }
+
+        // Subscribe to the public channel to receive messages
+        publicChannel.subscribe('message', (message) => {
+            // Display the new message in the chat box
+            const chatBox = document.getElementById('chat-box');
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            messageDiv.classList.add('received');
+            messageDiv.innerHTML = `<div>${message.data.text}</div>`; // Proper string interpolation
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;  // Scroll to the bottom
+
+            // Optionally, save the received message to the backend (DB)
+            saveMessageToDatabase(message.data.text);
+        });
+
+        // Send message to the public channel
+        function sendMessage() {
+            const messageInput = document.getElementById('message-input');
+            const message = messageInput.value.trim();
+            if (message !== '') {
+                // Publish message to the Ably public channel
+                publicChannel.publish('message', { text: message });
+
+                // Clear the input field
+                messageInput.value = '';
+            }
+        }
+
+        // Handle Enter key for sending messages
+        function checkEnter(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // Save the message to MongoDB via the backend
+        async function saveMessageToDatabase(text) {
+            try {
+                await fetch('/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text }),
+                });
+            } catch (error) {
+                console.error('Error saving message to DB:', error);
+            }
+        }
+
+        // Initialize chat with existing messages from the database
+        fetchMessages();
+    </script>
+</body>
+</html>
+
+
+
